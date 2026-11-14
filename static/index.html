@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SPHEREx Sky Viewer - Multi-Year & Player</title>
+  <style>
+    :root {
+      --bg: #1e1e1e;
+      --panel: #2d2d2d;
+      --line: #3f3f3f;
+      --fg: #ffffff;
+      --mut: #b0b0b0;
+      --acc: #007acc;
+      --ok: #2ea043;
+      --stage: #121212;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, sans-serif; }
+    header {
+      padding: 14px 20px;
+      background: #252526;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    h1 { margin: 0; font: 600 1.2rem system-ui, sans-serif; }
+    header p { margin: 3px 0 0; color: var(--mut); font-size: 0.85rem; }
+    .header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    
+    main { display: grid; grid-template-columns: 280px 1fr; gap: 16px; padding: 16px; height: calc(100vh - 74px); }
+    @media(max-width: 800px) { main { grid-template-columns: 1fr; height: auto; } }
+    
+    form { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px; display: grid; gap: 10px; align-content: start; }
+    label { display: grid; gap: 3px; font-size: 0.8rem; color: var(--mut); }
+    input, select, button { font: inherit; color: var(--fg); background: #3c3c3c; border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; }
+    button { cursor: pointer; transition: opacity 0.15s; }
+    button:hover { opacity: 0.9; }
+    button.go { background: var(--acc); border-color: var(--acc); font-weight: 600; }
+    button.share-btn { background: var(--ok); border-color: var(--ok); font-weight: 600; }
+    
+    .presets { display: flex; flex-wrap: wrap; gap: 4px; }
+    .presets button { font-size: 0.7rem; padding: 3px 5px; }
+
+    /* عرض الشبكة (Grid Gallery) */
+    .grid-stage {
+      background: var(--stage);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 16px;
+      height: 70vh;
+      overflow-y: auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 12px;
+      align-content: start;
+    }
+    .grid-item {
+      background: #252526;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 8px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .grid-item img {
+      width: 110px;
+      height: 110px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      background: #000;
+      border-radius: 2px;
+      border: 1px solid #111;
+    }
+    .grid-item b { font-size: 0.75rem; color: var(--fg); margin-top: 6px; display: block; }
+    .grid-item span { font-size: 0.7rem; color: var(--mut); margin-top: 2px; display: block; }
+
+    /* عرض المشغل المتسلسل (Player View) */
+    .player-stage {
+      background: var(--stage);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+      height: 62vh;
+      overflow: hidden;
+    }
+    .player-stage img { max-height: 100%; max-width: 100%; object-fit: contain; image-rendering: pixelated; }
+    .bar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 12px;
+      background: var(--panel);
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+    }
+    .bar input[type=range] { flex: 1; }
+
+    #info { color: var(--mut); font-size: 0.8rem; margin-top: 6px; }
+    #status { font-size: 0.85rem; margin-top: 4px; color: #7ee787; }
+    #status.err { color: #f48771; }
+    
+    .spectral-panel { margin-top: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+    .spectral-panel h3 { margin: 0 0 8px; font-size: 0.9rem; }
+    #specResult { margin-top: 8px; font-size: 0.8rem; color: var(--mut); }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>SPHEREx Sky Viewer - NASA Challenge Complete Edition</h1>
+      <p>Multi-year exploration, difference mode, detector aggregation & spectra.</p>
+    </div>
+    <div class="header-actions">
+      <button type="button" id="copyUrlBtn" class="share-btn">📋 Copy Shareable URL</button>
+      <button type="button" id="exportDataBtn">💾 Export Package (JSON)</button>
+    </div>
+  </header>
+
+  <main>
+    <div>
+      <form id="f">
+        <label>Target name or coordinates
+          <input id="target" required value="WISE 0855">
+        </label>
+        <div class="presets" id="presets"></div>
+        <label>Field of view: <b id="sv">3</b> arcmin
+          <input id="size" type="range" min="1" max="30" step="0.5" value="3">
+        </label>
+        <label>View Mode
+          <select id="viewMode">
+            <option value="grid" selected>Grid Gallery (All Years)</option>
+            <option value="player">Sequential Video Player</option>
+          </select>
+        </label>
+        <label>Processing Mode
+          <select id="procMode">
+            <option value="single" selected>Normal Images (Standard)</option>
+            <option value="diff">Difference Mode (Subtract Images)</option>
+          </select>
+        </label>
+        <label>Detector Filter / Arrays
+          <select id="det">
+            <option value="0" selected>All detectors (Separate)</option>
+            <option value="-1">🔥 Aggregate 6 Detectors (SNR Boost)</option>
+            <option value="1">Detector 1</option>
+            <option value="2">Detector 2</option>
+            <option value="3">Detector 3</option>
+            <option value="4">Detector 4</option>
+            <option value="5">Detector 5</option>
+            <option value="6">Detector 6</option>
+          </select>
+        </label>
+        <button class="go">Load Frames</button>
+      </form>
+
+      <div class="spectral-panel">
+        <h3>Chemical & Spectral Analysis</h3>
+        <button type="button" id="specBtn" style="width:100%">Fetch Spectrum</button>
+        <div id="specResult">Ready for extraction.</div>
+      </div>
+    </div>
+
+    <section>
+      <!-- شبكة المعرض -->
+      <div id="gridStage" class="grid-stage"></div>
+
+      <!-- مشغل الفيديو المتسلسل -->
+      <div id="playerStage" class="player-stage" style="display:none;"></div>
+
+      <!-- شريط التحكم في التشغيل والسرعة -->
+      <div class="bar" id="playerBar" style="display:none;">
+        <button id="pp" type="button">Play</button>
+        <input id="slider" type="range" min="0" max="0" value="0">
+        <label style="display:flex; align-items:center; gap:6px;">
+          Speed <input id="fps" type="range" min="1" max="15" value="4" style="width:80px">
+        </label>
+      </div>
+
+      <div id="info"></div>
+      <div id="status" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    
+    // قائمة الأهداف المطلوبة رسمياً في تحدي ناسا بالكامل
+    const PRESETS = {
+      "WISE 0855": ["WISE 0855", 3],
+      "Barnard's Star": ["Barnard's Star", 3],
+      "Epsilon Indi B": ["Epsilon Indi B", 3],
+      "RW Aurigae (Variable)": ["RW Aurigae", 3],
+      "R Draconis (Variable)": ["R Draconis", 3]
+    };
+
+    let imgs = [], meta = [], lastPayload = null, cur = 0, timer = null;
+
+    function initFromURL() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('target')) $('target').value = params.get('target');
+      if (params.has('size')) {
+        const s = params.get('size');
+        $('size').value = s;
+        $('sv').textContent = s;
+      }
+      if (params.has('view')) $('viewMode').value = params.get('view');
+      if (params.has('mode')) $('procMode').value = params.get('mode');
+      if (params.has('det')) $('det').value = params.get('det');
+    }
+
+    function syncURL() {
+      const params = new URLSearchParams();
+      params.set('target', $('target').value.trim());
+      params.set('size', $('size').value);
+      params.set('view', $('viewMode').value);
+      params.set('mode', $('procMode').value);
+      if ($('det').value !== '0') params.set('det', $('det').value);
+
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState({}, '', newUrl);
+    }
+
+    for (const [k, [t, s]] of Object.entries(PRESETS)) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = k;
+      b.onclick = () => {
+        $('target').value = t;
+        $('size').value = s;
+        $('sv').textContent = s;
+        syncURL();
+        load();
+        loadSpectrum();
+      };
+      $('presets').append(b);
+    }
+
+    $('size').oninput = e => {
+      $('sv').textContent = e.target.value;
+      syncURL();
+    };
+
+    $('viewMode').onchange = () => {
+      syncURL();
+      if (!imgs.length) return;
+      if ($('viewMode').value === 'grid') {
+        stop();
+        renderGrid();
+      } else {
+        renderPlayer();
+      }
+    };
+
+    $('procMode').onchange = () => {
+      syncURL();
+      load();
+    };
+
+    $('det').onchange = () => {
+      syncURL();
+      load();
+    };
+
+    $('f').onsubmit = e => {
+      e.preventDefault();
+      syncURL();
+      load();
+      loadSpectrum();
+    };
+
+    function status(m, err) {
+      $('status').textContent = m;
+      $('status').className = err ? 'err' : '';
+    }
+
+    function stop() {
+      clearInterval(timer);
+      timer = null;
+      if ($('pp')) $('pp').textContent = 'Play';
+    }
+
+    function play() {
+      stop();
+      if ($('pp')) $('pp').textContent = 'Pause';
+      timer = setInterval(() => showFrame((cur + 1) % imgs.length), 1000 / $('fps').value);
+    }
+
+    function showFrame(i) {
+      cur = +i;
+      const stage = $('playerStage');
+      stage.replaceChildren(imgs[cur]);
+      $('slider').value = cur;
+      const m = meta[cur];
+      $('info').textContent = `Frame: ${m.name} · Date: ${m.date} · Det: ${m.det || 'Combined (SNR Boost)'}`;
+    }
+
+    async function load() {
+      stop();
+      syncURL();
+      status('Loading multi-year frames & detector arrays...');
+      const p = new URLSearchParams({
+        target: $('target').value,
+        size: $('size').value,
+        mode: $('procMode').value,
+        det: $('det').value,
+        demo: false
+      });
+
+      try {
+        const r = await fetch('/api/frames?' + p);
+        const j = await r.json();
+        if (!r.ok) throw Error(j.detail || 'Request failed');
+
+        lastPayload = j;
+        meta = j.meta;
+        imgs = j.frames.map((b, idx) => {
+          const i = new Image();
+          i.alt = meta[idx].name;
+          i.src = 'data:image/png;base64,' + b;
+          return i;
+        });
+
+        if ($('viewMode').value === 'grid') {
+          renderGrid();
+        } else {
+          renderPlayer();
+        }
+        status(`Loaded ${j.n} historical frames successfully.`);
+      } catch (e) {
+        status(e.message, true);
+      }
+    }
+
+    function renderGrid() {
+      $('gridStage').style.display = 'grid';
+      $('playerStage').style.display = 'none';
+      $('playerBar').style.display = 'none';
+
+      const grid = $('gridStage');
+      grid.replaceChildren();
+
+      imgs.forEach((img, idx) => {
+        const item = document.createElement('div');
+        item.className = 'grid-item';
+        const cloneImg = img.cloneNode(true);
+        const label = document.createElement('b');
+        label.textContent = meta[idx].name;
+        const dateSub = document.createElement('span');
+        dateSub.textContent = meta[idx].date;
+
+        item.append(cloneImg, label, dateSub);
+        grid.append(item);
+      });
+      $('info').textContent = `Grid Gallery: Showing all ${imgs.length} multi-year frames.`;
+    }
+
+    function renderPlayer() {
+      $('gridStage').style.display = 'none';
+      $('playerStage').style.display = 'grid';
+      $('playerBar').style.display = 'flex';
+
+      $('slider').max = imgs.length - 1;
+      $('slider').disabled = false;
+      showFrame(0);
+    }
+
+    if ($('pp')) $('pp').onclick = () => timer ? stop() : play();
+    if ($('fps')) $('fps').oninput = () => timer && play();
+    if ($('slider')) $('slider').oninput = e => { stop(); showFrame(e.target.value); };
+
+    $('copyUrlBtn').onclick = async () => {
+      syncURL();
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        const orig = $('copyUrlBtn').textContent;
+        $('copyUrlBtn').textContent = '✅ Link Copied!';
+        setTimeout(() => $('copyUrlBtn').textContent = orig, 2000);
+      } catch (err) {
+        status('Failed to copy URL automatically. Copy it from the address bar.', true);
+      }
+    };
+
+    $('exportDataBtn').onclick = () => {
+      if (!lastPayload) {
+        status('No frames loaded yet to export.', true);
+        return;
+      }
+      const exportObj = {
+        shareable_url: window.location.href,
+        target: $('target').value,
+        fov_arcmin: parseFloat($('size').value),
+        ra_deg: lastPayload.ra,
+        dec_deg: lastPayload.dec,
+        total_frames: lastPayload.n,
+        frames_metadata: lastPayload.meta
+      };
+      const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `SPHEREx_${$('target').value.replace(/\s+/g, '_')}_package.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      status('Research package exported successfully.');
+    };
+
+    async function loadSpectrum() {
+      const target = $('target').value;
+      const size = $('size').value;
+      try {
+        const res = await fetch(`/api/spectrum?target=${encodeURIComponent(target)}&size=${size}`);
+        const data = await res.json();
+        if (!res.ok) throw Error(data.detail);
+        $('specResult').innerHTML = `<b>Target:</b> ${data.target}<br><b>Wavelengths:</b> ${data.wavelengths.length} bands extracted.`;
+      } catch (e) {
+        $('specResult').textContent = "Error: " + e.message;
+      }
+    }
+    $('specBtn').onclick = loadSpectrum;
+
+    initFromURL();
+    load();
+    loadSpectrum();
+  </script>
+</body>
+</html>

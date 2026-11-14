@@ -1,0 +1,11 @@
+numpy
+scipy
+astropy
+astroquery
+pyvo
+reproject
+pillow
+httpx
+fastapi
+uvicorn[standard]
+pytest
